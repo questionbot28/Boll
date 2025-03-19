@@ -66,7 +66,23 @@ module.exports = {
                 ]
             });
 
-            // Run the Python script to check only the uploaded file
+            // Update status with file extension information
+            const fileExt = path.extname(fileName).toLowerCase();
+            
+            // Additional message for archive files
+            if (fileExt === '.zip' || fileExt === '.rar') {
+                await statusMessage.edit({
+                    embeds: [
+                        statusEmbed
+                            .setDescription(`File downloaded successfully. ${fileExt.toUpperCase()} archive detected. Extracting and checking Netflix cookies... This may take longer.`)
+                    ]
+                });
+            }
+            
+            // Store for later use
+            const fileExtension = fileExt;
+            
+            // Run the Python script to check the uploaded file
             const pythonProcess = spawn('python', ['netflix_cookie_checker.py', filePath]);
 
             let outputData = '';
@@ -82,16 +98,52 @@ module.exports = {
                 console.error(`[Netflix Checker Error] ${data.toString().trim()}`);
             });
 
-            // Update status periodically
+            // Prepare for more detailed status updates
+            let processingStage = 'initializing';
+            let startTime = Date.now();
+            // Use the fileExtension we already defined above
+            const isArchive = fileExtension === '.zip' || fileExtension === '.rar';
+            
+            // Update status periodically with more detailed information
             const updateInterval = setInterval(async () => {
+                const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+                let statusDescription = 'Checking your Netflix cookies...';
+                
+                // Use output to determine processing stage
+                if (outputData.includes('Extracting archive')) {
+                    processingStage = 'extracting';
+                } else if (outputData.includes('Found') && outputData.includes('Netflix cookie files to check')) {
+                    processingStage = 'found_files';
+                } else if (outputData.includes('Processing')) {
+                    processingStage = 'processing';
+                }
+                
+                // Create appropriate status message based on stage
+                switch (processingStage) {
+                    case 'extracting':
+                        statusDescription = `Extracting files from ${fileExtension.toUpperCase()} archive... (${elapsedTime}s elapsed)`;
+                        break;
+                    case 'found_files':
+                        const foundMatch = outputData.match(/Found (\d+) Netflix cookie files to check/);
+                        const fileCount = foundMatch ? foundMatch[1] : 'multiple';
+                        statusDescription = `Found ${fileCount} cookie files to check. Processing... (${elapsedTime}s elapsed)`;
+                        break;
+                    case 'processing':
+                        statusDescription = `Checking Netflix cookies... This might take a few minutes. (${elapsedTime}s elapsed)`;
+                        break;
+                    default:
+                        statusDescription = `Analyzing ${isArchive ? fileExtension.toUpperCase() + ' archive' : 'cookie file'}... (${elapsedTime}s elapsed)`;
+                }
+                
                 const updatedEmbed = new MessageEmbed()
                     .setColor(config.color?.blue || '#0099ff')
                     .setTitle('Netflix Cookie Checker')
-                    .setDescription('Checking your Netflix cookies... This might take a few minutes.')
+                    .setDescription(statusDescription)
                     .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
                     .setTimestamp();
+                
                 await statusMessage.edit({ embeds: [updatedEmbed] });
-            }, 10000); // Update every 10 seconds
+            }, 5000); // Update every 5 seconds for more responsive updates
 
             pythonProcess.on('close', async (code) => {
                 clearInterval(updateInterval);

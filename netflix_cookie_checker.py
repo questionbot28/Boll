@@ -334,6 +334,105 @@ def worker(cookie_files, results):
         except Exception as e:
             debug_print(f"Worker error: {str(e)}")
 
+def extract_from_archive(archive_path, extract_dir):
+    """Extract files from a ZIP or RAR archive."""
+    try:
+        debug_print(f"Extracting archive: {archive_path} to {extract_dir}")
+        file_ext = os.path.splitext(archive_path)[1].lower()
+        
+        if file_ext == '.zip':
+            debug_print("Processing ZIP file")
+            try:
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    # List all files in the archive
+                    file_list = zip_ref.namelist()
+                    debug_print(f"ZIP contains {len(file_list)} files/directories")
+                    
+                    # Extract the files
+                    zip_ref.extractall(extract_dir)
+                debug_print("ZIP extraction successful")
+                return True
+            except zipfile.BadZipFile as e:
+                debug_print(f"Bad ZIP file: {e}")
+                return False
+                
+        elif file_ext == '.rar':
+            debug_print("Processing RAR file")
+            try:
+                with rarfile.RarFile(archive_path) as rar_ref:
+                    # List all files in the archive
+                    file_list = rar_ref.namelist()
+                    debug_print(f"RAR contains {len(file_list)} files/directories")
+                    
+                    # Extract the files
+                    rar_ref.extractall(extract_dir)
+                debug_print("RAR extraction successful")
+                return True
+            except Exception as e:
+                debug_print(f"Error with RAR file: {e}")
+                # Create a note file about RAR extraction issues
+                rar_note_path = os.path.join(extract_dir, "RAR_EXTRACTION_NOTE.txt")
+                with open(rar_note_path, 'w') as f:
+                    f.write(f"Error extracting RAR file: {e}\n")
+                    f.write("If extraction fails, please extract manually and upload .txt files instead.\n")
+                return False
+        else:
+            debug_print(f"Unsupported archive format: {file_ext}")
+            return False
+    except Exception as e:
+        debug_print(f"Error extracting archive {archive_path}: {e}")
+        return False
+
+def process_directory(directory, processed_files=None):
+    """Process a directory recursively for cookie files and archives."""
+    if processed_files is None:
+        processed_files = []
+    
+    debug_print(f"Processing directory: {directory}")
+    cookie_files = []
+    
+    # Walk through all files and subdirectories
+    for root, dirs, files in os.walk(directory):
+        debug_print(f"Scanning {root}: found {len(files)} files and {len(dirs)} directories")
+        
+        for file in files:
+            file_path = os.path.join(root, file)
+            
+            # Skip if already processed
+            if file_path in processed_files:
+                debug_print(f"Skipping already processed file: {file_path}")
+                continue
+            
+            # Add to processed files
+            processed_files.append(file_path)
+            
+            # Check file extension
+            file_ext = os.path.splitext(file)[1].lower()
+            
+            # Process archives
+            if file_ext in ['.zip', '.rar']:
+                debug_print(f"Found archive: {file_path}")
+                
+                # Create extraction directory
+                extract_dir = os.path.join(directory, f"extracted_{os.path.splitext(file)[0]}")
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                # Extract archive
+                if extract_from_archive(file_path, extract_dir):
+                    # Process extracted files
+                    additional_files = process_directory(extract_dir, processed_files)
+                    cookie_files.extend(additional_files)
+                    
+                    # We don't delete the extraction directory here to avoid issues with
+                    # files that might still be in use
+            
+            # Process txt files
+            elif file_ext == '.txt':
+                debug_print(f"Found cookie file: {file_path}")
+                cookie_files.append(file_path)
+    
+    return cookie_files
+
 def check_netflix_cookies(cookies_dir="netflix", num_threads=3):
     """Check all Netflix cookies in the specified directory."""
     global total_working, total_fails, total_unsubscribed, total_checked, total_broken
@@ -345,9 +444,8 @@ def check_netflix_cookies(cookies_dir="netflix", num_threads=3):
     # Convert any JSON cookies to Netscape format
     process_json_files(cookies_dir)
     
-    # Get all cookie files
-    cookie_files = [os.path.join(cookies_dir, f) for f in os.listdir(cookies_dir) 
-                    if f.endswith('.txt') and os.path.isfile(os.path.join(cookies_dir, f))]
+    # Process the directory recursively to find all cookie files including in archives
+    cookie_files = process_directory(cookies_dir)
     
     debug_print(f"Found {len(cookie_files)} Netflix cookie files to check")
     
