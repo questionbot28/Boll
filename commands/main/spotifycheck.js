@@ -125,9 +125,85 @@ module.exports = {
                 // Clear the timeout
                 clearTimeout(timeout);
                 
-                // Clean up the temporary file
+                // Clean up all temporary files and directories
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
+                    console.log(`Removed temporary file: ${filePath}`);
+                }
+                
+                // Clean cookies and working_cookies directories to save space
+                const cookiesDir = path.join(__dirname, '../../cookies');
+                const workingCookiesDir = path.join(__dirname, '../../working_cookies');
+                
+                // Function to recursively remove directories
+                const cleanupDirectory = (dirPath) => {
+                    if (fs.existsSync(dirPath)) {
+                        try {
+                            const items = fs.readdirSync(dirPath);
+                            
+                            // Process all files and subdirectories
+                            for (const item of items) {
+                                const itemPath = path.join(dirPath, item);
+                                const stats = fs.statSync(itemPath);
+                                
+                                if (stats.isDirectory()) {
+                                    // Recursively clean subdirectories
+                                    cleanupDirectory(itemPath);
+                                    // Remove the empty directory
+                                    fs.rmdirSync(itemPath);
+                                    console.log(`Removed directory: ${itemPath}`);
+                                } else {
+                                    // Remove files
+                                    fs.unlinkSync(itemPath);
+                                    console.log(`Removed file: ${itemPath}`);
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error cleaning directory ${dirPath}: ${error.message}`);
+                        }
+                    }
+                };
+                
+                // Clean both directories but maintain the root folders
+                try {
+                    const cleanCookiesDir = () => {
+                        if (fs.existsSync(cookiesDir)) {
+                            const items = fs.readdirSync(cookiesDir);
+                            for (const item of items) {
+                                const itemPath = path.join(cookiesDir, item);
+                                if (fs.statSync(itemPath).isDirectory()) {
+                                    cleanupDirectory(itemPath);
+                                    fs.rmdirSync(itemPath);
+                                } else {
+                                    fs.unlinkSync(itemPath);
+                                }
+                            }
+                        }
+                    };
+                    
+                    const cleanWorkingCookiesDir = () => {
+                        if (fs.existsSync(workingCookiesDir)) {
+                            const items = fs.readdirSync(workingCookiesDir);
+                            for (const item of items) {
+                                const itemPath = path.join(workingCookiesDir, item);
+                                if (fs.statSync(itemPath).isDirectory()) {
+                                    cleanupDirectory(itemPath);
+                                    fs.rmdirSync(itemPath);
+                                } else {
+                                    fs.unlinkSync(itemPath);
+                                }
+                            }
+                        }
+                    };
+                    
+                    // Clean directories if valid results exist
+                    if (code === 0) {
+                        cleanCookiesDir();
+                        cleanWorkingCookiesDir();
+                        console.log("Cleaned up all temporary cookie directories");
+                    }
+                } catch (error) {
+                    console.error(`Error during cleanup: ${error.message}`);
                 }
                 
                 if (code !== 0) {

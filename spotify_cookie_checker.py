@@ -130,7 +130,16 @@ def extract_cookies_from_file(file_path):
         print(f"Error reading file {file_path}: {e}")
         return None
 
-# Check single cookie
+# Global request session and timeout settings for better performance
+global_session = requests.Session()
+global_session.headers.update({
+    'Accept-Encoding': 'identity',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9'
+})
+REQUEST_TIMEOUT = 5  # 5 seconds timeout for requests
+
+# Check single cookie - optimized for speed
 def check_single_cookie(cookie_content, filename):
     if not cookie_content or not cookie_content.strip():
         with lock:
@@ -138,6 +147,9 @@ def check_single_cookie(cookie_content, filename):
         return None, f"⚠ Empty cookie content in {filename}"
 
     try:
+        debug_print(f"Processing cookie from {filename}")
+        
+        # Parse cookies quickly
         cookies_dict = {}
         for line in cookie_content.splitlines():
             parts = line.strip().split('\t')
@@ -145,20 +157,37 @@ def check_single_cookie(cookie_content, filename):
                 _, _, _, _, _, name, value = parts[:7]
                 cookies_dict[name] = value
 
+        # Check if we have any valid cookies
         if not cookies_dict:
             with lock:
                 results['errors'] += 1
             return None, f"⚠ No valid cookies found in {filename}"
 
+        # Use a dedicated session for this request with a timeout
         session = requests.Session()
         session.cookies.update(cookies_dict)
-        session.headers.update({'Accept-Encoding': 'identity'})
-
-        response = session.get("https://www.spotify.com/eg-ar/api/account/v1/datalayer")
+        session.headers.update(global_session.headers)
+        
+        debug_print(f"Sending request to Spotify API for {filename}")
+        try:
+            response = session.get("https://www.spotify.com/eg-ar/api/account/v1/datalayer", timeout=REQUEST_TIMEOUT)
+        except requests.exceptions.Timeout:
+            with lock:
+                results['errors'] += 1
+            return None, f"⚠ Request timeout for {filename}"
+        except requests.exceptions.RequestException as e:
+            with lock:
+                results['errors'] += 1
+            return None, f"⚠ Request error for {filename}: {e}"
 
         with lock:
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError:
+                    results['errors'] += 1
+                    return None, f"⚠ Invalid JSON response for {filename}"
+                
                 plan = plan_name_mapping(data.get("currentPlan", "unknown"))
                 
                 # Update plan counts
@@ -170,6 +199,7 @@ def check_single_cookie(cookie_content, filename):
                     results['unknown'] += 1
                 
                 message = f"✔ Login successful: {filename} ({plan})"
+                debug_print(message)
                 
                 # Format and save cookie
                 formatted_cookie, plan = format_cookie_file(data, remove_unwanted_content(cookie_content))
@@ -183,12 +213,14 @@ def check_single_cookie(cookie_content, filename):
                 return cookie_file_path, message
             else:
                 results['bad'] += 1
-                return None, f"✘ Login failed: {filename}"
+                return None, f"✘ Login failed: {filename} (Status: {response.status_code})"
 
     except Exception as e:
         with lock:
             results['errors'] += 1
-        return None, f"⚠ Error checking {filename}: {e}"
+        error_msg = f"⚠ Error checking {filename}: {e}"
+        debug_print(error_msg)
+        return None, error_msg
 
 # Process a file for cookies
 def process_file_for_cookies(file_path, file_name):

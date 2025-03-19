@@ -39,38 +39,51 @@ module.exports = {
         const randomFile = files[Math.floor(Math.random() * files.length)];
         const filePath = `${folderPath}${randomFile}`;
 
-        // Send the file to the mentioned user
-        const fileAttachment = new MessageAttachment(filePath);
-
-        // Customize the embed based on the specified category
-        const dmEmbed = new MessageEmbed()
-            .setColor('#0099ff')
-            .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access`) // Capitalize the category
-            .setDescription(`🌕 **WRECKED G3N** 🌕\n\n**Service**\n💻 Here is your ${category} access`)
-            .addField('Instructions', `Step 1: Make sure you are on a PC\nStep 2: Download the extension called Cookie Editor [link](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)\nStep 3: Go to the ${category} website and pin Cookie Editor\nStep 4: Delete all cookies (the bin icon) and then press import and copy the thing we gave you\nStep 5: After import, just click refresh on the whole page, and you should be logged in\nStep 6: Enjoy!!!\n\nEnjoy at ${category.charAt(0).toUpperCase() + category.slice(1)}!`);
-        // Send the file and embed as a direct message to the mentioned user
-        mentionedUser.send({ embed: dmEmbed }).then(() => {
-            // After sending the embed, send the file to the mentioned user
-            mentionedUser.send({ files: [fileAttachment] }).then(() => {
-                // After sending the file, send the success message in the channel
-
-                fs.unlinkSync(filePath);
-                message.channel.send(
-                    new MessageEmbed()
-                        .setColor('#00ff00') // Green color for success
-                        .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access Sent!`)
-                        .setDescription(`Check ${mentionedUser.tag}'s private messages! If they do not receive the message, please ask them to unlock their private!`)
-                        .setImage(config.gif) // Use the URL from config.json
-                        .setFooter(message.author.tag, message.author.displayAvatarURL({ dynamic: true, size: 64 }))
-                        .setTimestamp()
-                );
+        try {
+            // Check if file exists before proceeding
+            if (!fs.existsSync(filePath)) {
+                return message.reply(`File ${randomFile} not found in the ${category} folder.`);
+            }
+            
+            // Read file content
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            
+            // Customize the embed based on the specified category
+            const dmEmbed = new MessageEmbed()
+                .setColor('#0099ff')
+                .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access`) // Capitalize the category
+                .setDescription(`🌕 **WRECKED G3N** 🌕\n\n**Service**\n💻 Here is your ${category} access`)
+                .addField('Instructions', `Step 1: Make sure you are on a PC\nStep 2: Download the extension called Cookie Editor [link](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)\nStep 3: Go to the ${category} website and pin Cookie Editor\nStep 4: Delete all cookies (the bin icon) and then press import and copy the thing we gave you\nStep 5: After import, just click refresh on the whole page, and you should be logged in\nStep 6: Enjoy!!!\n\nEnjoy at ${category.charAt(0).toUpperCase() + category.slice(1)}!`);
+            
+            // Create the attachment with file content
+            const fileBuffer = Buffer.from(fileContent);
+            const fileAttachment = new MessageAttachment(fileBuffer, randomFile);
+            
+            // Send the messages to the user
+            mentionedUser.send({ embeds: [dmEmbed] }).then(() => {
+                mentionedUser.send({ files: [fileAttachment] }).then(() => {
+                    message.channel.send({
+                        embeds: [
+                            new MessageEmbed()
+                                .setColor('#00ff00') // Green color for success
+                                .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access Sent!`)
+                                .setDescription(`Check ${mentionedUser.tag}'s private messages! If they do not receive the message, please ask them to unlock their private!`)
+                                .setImage(config.gif) // Use the URL from config.json
+                                .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                                .setTimestamp()
+                        ]
+                    });
+                }).catch((err) => {
+                    console.error(`Failed to send file to ${mentionedUser.tag}: ${err}`);
+                    message.reply(`Failed to send file to ${mentionedUser.tag}. Please check the user's privacy settings.`);
+                });
             }).catch((err) => {
-                console.error(`Failed to send file to ${mentionedUser.tag}: ${err}`);
-                message.reply(`Failed to send file to ${mentionedUser.tag}. Please check the user's privacy settings.`);
+                console.error(`Failed to send DM to ${mentionedUser.tag}: ${err}`);
+                message.reply(`Failed to send DM to ${mentionedUser.tag}. Please check the user's privacy settings.`);
             });
-        }).catch((err) => {
-            console.error(`Failed to send DM to ${mentionedUser.tag}: ${err}`);
-            message.reply(`Failed to send DM to ${mentionedUser.tag}. Please check the user's privacy settings.`);
-        });
+        } catch (err) {
+            console.error(`Error in csend command: ${err}`);
+            message.reply(`An error occurred while processing this command: ${err.message}`);
+        }
     },
 };
