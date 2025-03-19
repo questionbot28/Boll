@@ -1,15 +1,21 @@
 {
   "status": "completed",
-  "total_checked": 0,
-  "valid": 0,
+  "total_checked": 1,
+  "valid": 1,
   "invalid": 0,
   "errors": 0,
   "premium": 0,
   "family": 0,
   "duo": 0,
   "student": 0,
-  "free": 0,
+  "free": 1,
   "unknown": 0,
-  "valid_cookies": [],
-  "messages": []
+  "files_processed": 1,
+  "archives_processed": 0,
+  "valid_cookies": [
+    "/home/runner/workspace/working_cookies/free/spotify_133.txt.txt"
+  ],
+  "messages": [
+    "\u2714 Login successful: spotify_133.txt (Free)"
+  ]
 }
