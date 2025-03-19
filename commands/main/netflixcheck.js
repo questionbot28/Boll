@@ -140,6 +140,7 @@ module.exports = {
                         { name: 'Failed Cookies', value: stats.failed, inline: true },
                         { name: 'Broken Cookies', value: stats.broken, inline: true }
                     ])
+                    .setImage('https://cdn.discordapp.com/attachments/1263458101886193725/1349031252216250503/350kb.gif?ex=67db8202&is=67da3082&hm=87a320f2ce832ed433016bb268feba16068c2d03cc7905166f7c1996b9cfb569&')
                     .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
                     .setTimestamp();
                 
@@ -153,6 +154,7 @@ module.exports = {
                         .setColor(config.color?.green || '#00ff00')
                         .setTitle('Working Netflix Cookies')
                         .setDescription(`Found ${workingFiles.length} working Netflix cookies! Use \`.csend @user netflix\` to send them.`)
+                        .setImage('https://cdn.discordapp.com/attachments/1263458101886193725/1349031252216250503/350kb.gif?ex=67db8202&is=67da3082&hm=87a320f2ce832ed433016bb268feba16068c2d03cc7905166f7c1996b9cfb569&')
                         .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
                         .setTimestamp();
                     

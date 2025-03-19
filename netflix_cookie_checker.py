@@ -116,6 +116,7 @@ def process_json_files(directory):
 
 def load_cookies_from_file(cookie_file):
     """Load cookies from a given file and return a dictionary of cookies."""
+    global total_broken
     cookies = {}
     try:
         with open(cookie_file, 'r', encoding='utf-8', errors='ignore') as f:
@@ -137,7 +138,6 @@ def load_cookies_from_file(cookie_file):
         broken_folder = dirs["netflix"]["broken"]
         if os.path.exists(cookie_file):
             shutil.move(cookie_file, os.path.join(broken_folder, os.path.basename(cookie_file)))
-        global total_broken
         with lock:
             total_broken += 1
     
@@ -268,7 +268,7 @@ def handle_failed_login(cookie_file):
 
 def process_cookie_file(cookie_file):
     """Process a single Netflix cookie file to check validity."""
-    global total_checked
+    global total_checked, total_broken
     with lock:
         total_checked += 1
     
@@ -288,7 +288,6 @@ def process_cookie_file(cookie_file):
             if os.path.exists(cookie_file):
                 shutil.move(cookie_file, os.path.join(broken_folder, os.path.basename(cookie_file)))
             with lock:
-                global total_broken
                 total_broken += 1
             return result
         
@@ -318,7 +317,6 @@ def process_cookie_file(cookie_file):
         if os.path.exists(cookie_file):
             shutil.move(cookie_file, os.path.join(broken_folder, os.path.basename(cookie_file)))
         with lock:
-            global total_broken
             total_broken += 1
         return result
 
