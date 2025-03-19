@@ -49,6 +49,7 @@ module.exports = {
             let validCookie = null;
             let validCookieContent = null;
             let validCookieFilename = null;
+            let validCookieDetails = null;
             
             if (category === 'spotify') {
                 // For Spotify, check working_cookies directory first
@@ -84,10 +85,47 @@ module.exports = {
                                 // Read the cookie file
                                 const cookieContent = fs.readFileSync(filePath, 'utf8');
                                 
+                                // Extract cookie details from the file or folder name
+                                let cookieDetails = {
+                                    plan: folderName.charAt(0).toUpperCase() + folderName.slice(1),
+                                    type: 'Unknown',
+                                    country: 'Unknown',
+                                    autopay: 'Unknown',
+                                    trial: 'Unknown'
+                                };
+                                
+                                // Try to parse details from the file content
+                                try {
+                                    // Look for plan, country, autopay, trial details in the content
+                                    const planMatch = cookieContent.match(/PLAN\s*:\s*([^\r\n]+)/i);
+                                    const countryMatch = cookieContent.match(/COUNTRY\s*:\s*([^\r\n]+)/i);
+                                    const autopayMatch = cookieContent.match(/AutoPay\s*:\s*([^\r\n]+)/i);
+                                    const trialMatch = cookieContent.match(/Trial\s*:\s*([^\r\n]+)/i);
+                                    const emailMatch = cookieContent.match(/Email\s*:\s*([^\r\n]+)/i);
+                                    
+                                    if (planMatch && planMatch[1]) cookieDetails.plan = planMatch[1].trim();
+                                    if (countryMatch && countryMatch[1]) cookieDetails.country = countryMatch[1].trim();
+                                    if (autopayMatch && autopayMatch[1]) cookieDetails.autopay = autopayMatch[1].trim();
+                                    if (trialMatch && trialMatch[1]) cookieDetails.trial = trialMatch[1].trim();
+                                    if (emailMatch && emailMatch[1]) cookieDetails.email = emailMatch[1].trim();
+                                    
+                                    // Also try to extract from the filename
+                                    if (randomFile.includes('Owner')) {
+                                        cookieDetails.type = 'Owner';
+                                    } else if (randomFile.includes('Member')) {
+                                        cookieDetails.type = 'Member';
+                                    } else if (randomFile.includes('Payment Pending')) {
+                                        cookieDetails.type = 'Payment Pending';
+                                    }
+                                } catch (err) {
+                                    console.error(`Error parsing cookie details: ${err.message}`);
+                                }
+                                
                                 // We found a cookie!
                                 validCookie = filePath;
                                 validCookieContent = cookieContent;
                                 validCookieFilename = randomFile;
+                                validCookieDetails = cookieDetails;
                                 break;
                             }
                         }
@@ -140,10 +178,37 @@ module.exports = {
                             // Read file content
                             const fileContent = fs.readFileSync(filePath, 'utf8');
                             
+                            // Try to parse cookie details
+                            let cookieDetails = {
+                                plan: 'Unknown',
+                                type: 'Unknown',
+                                country: 'Unknown',
+                                autopay: 'Unknown',
+                                trial: 'Unknown'
+                            };
+                            
+                            try {
+                                // Look for plan, country, autopay, trial details in the content
+                                const planMatch = fileContent.match(/PLAN\s*:\s*([^\r\n]+)/i);
+                                const countryMatch = fileContent.match(/COUNTRY\s*:\s*([^\r\n]+)/i);
+                                const autopayMatch = fileContent.match(/AutoPay\s*:\s*([^\r\n]+)/i);
+                                const trialMatch = fileContent.match(/Trial\s*:\s*([^\r\n]+)/i);
+                                const emailMatch = fileContent.match(/Email\s*:\s*([^\r\n]+)/i);
+                                
+                                if (planMatch && planMatch[1]) cookieDetails.plan = planMatch[1].trim();
+                                if (countryMatch && countryMatch[1]) cookieDetails.country = countryMatch[1].trim();
+                                if (autopayMatch && autopayMatch[1]) cookieDetails.autopay = autopayMatch[1].trim();
+                                if (trialMatch && trialMatch[1]) cookieDetails.trial = trialMatch[1].trim();
+                                if (emailMatch && emailMatch[1]) cookieDetails.email = emailMatch[1].trim();
+                            } catch (err) {
+                                console.error(`Error parsing cookie details: ${err.message}`);
+                            }
+                            
                             // TODO: We'd want to verify the cookie here, but for now we'll just use it
                             validCookie = filePath;
                             validCookieContent = fileContent;
                             validCookieFilename = randomFile;
+                            validCookieDetails = cookieDetails;
                             break;
                         }
                     }
@@ -203,9 +268,36 @@ module.exports = {
                 // Read file content
                 const fileContent = fs.readFileSync(filePath, 'utf8');
                 
+                // Try to parse cookie details for Netflix too
+                let cookieDetails = {
+                    type: 'Netflix',
+                    quality: randomFile.includes('UHD') ? 'UHD/4K' : (randomFile.includes('HD') ? 'HD' : 'Standard'),
+                    region: 'Unknown'
+                };
+                
+                try {
+                    // Try to extract from the filename or path
+                    if (randomFile.includes('US') || filePath.includes('US')) {
+                        cookieDetails.region = 'US';
+                    } else if (randomFile.includes('UK') || filePath.includes('UK')) {
+                        cookieDetails.region = 'UK';
+                    } else if (randomFile.includes('EU') || filePath.includes('EU')) {
+                        cookieDetails.region = 'EU';
+                    }
+                    
+                    // Look for region in the content if not found in filename
+                    if (cookieDetails.region === 'Unknown') {
+                        const regionMatch = fileContent.match(/Region\s*:\s*([^\r\n]+)/i);
+                        if (regionMatch && regionMatch[1]) cookieDetails.region = regionMatch[1].trim();
+                    }
+                } catch (err) {
+                    console.error(`Error parsing Netflix cookie details: ${err.message}`);
+                }
+                
                 validCookie = filePath;
                 validCookieContent = fileContent;
                 validCookieFilename = randomFile;
+                validCookieDetails = cookieDetails;
             }
             
             // If we didn't find a valid cookie
@@ -223,17 +315,41 @@ module.exports = {
                 return;
             }
             
-            // Update status message
-            await processingMessage.edit({
-                embeds: [
-                    new MessageEmbed()
-                        .setColor(config.color.green || '#00ff00')
-                        .setTitle('Cookie Found')
-                        .setDescription(`Valid ${category} cookie found! Sending to ${mentionedUser.tag}...`)
-                        .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                        .setTimestamp()
-                ]
-            });
+            // Update status message with cookie details
+            const statusEmbed = new MessageEmbed()
+                .setColor(config.color.green || '#00ff00')
+                .setTitle('Cookie Found')
+                .setDescription(`Valid ${category} cookie found! Sending to ${mentionedUser.tag}...`)
+                .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                .setTimestamp();
+                
+            // Add cookie details if available
+            if (validCookieDetails) {
+                if (category === 'spotify') {
+                    statusEmbed.addFields([
+                        {
+                            name: 'Cookie Details',
+                            value: `Plan: ${validCookieDetails.plan || 'Unknown'}\n` +
+                                  `Type: ${validCookieDetails.type || 'Unknown'}\n` +
+                                  `Country: ${validCookieDetails.country || 'Unknown'}\n` +
+                                  `AutoPay: ${validCookieDetails.autopay || 'Unknown'}\n` +
+                                  `Trial: ${validCookieDetails.trial || 'Unknown'}\n` +
+                                  (validCookieDetails.email ? `Email: ${validCookieDetails.email}` : '')
+                        }
+                    ]);
+                } else if (category === 'netflix') {
+                    statusEmbed.addFields([
+                        {
+                            name: 'Cookie Details',
+                            value: `Type: ${validCookieDetails.type || 'Unknown'}\n` +
+                                  `Quality: ${validCookieDetails.quality || 'Unknown'}\n` +
+                                  `Region: ${validCookieDetails.region || 'Unknown'}`
+                        }
+                    ]);
+                }
+            }
+            
+            await processingMessage.edit({ embeds: [statusEmbed] });
             
             // Customize the embed based on the specified category
             const dmEmbed = new MessageEmbed()
@@ -254,18 +370,38 @@ module.exports = {
                 await mentionedUser.send({ embeds: [dmEmbed] });
                 await mentionedUser.send({ files: [fileAttachment] });
                 
-                // Success message in channel
-                await processingMessage.edit({
-                    embeds: [
-                        new MessageEmbed()
-                            .setColor(config.color.green || '#00ff00')
-                            .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access Sent!`)
-                            .setDescription(`Check ${mentionedUser.tag}'s private messages! If they do not receive the message, please ask them to unlock their private!`)
-                            .setImage(config.gif) // Use the URL from config.json
-                            .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                            .setTimestamp()
-                    ]
-                });
+                // Success message in channel with cookie details
+                const successEmbed = new MessageEmbed()
+                    .setColor(config.color.green || '#00ff00')
+                    .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Access Sent!`)
+                    .setDescription(`Check ${mentionedUser.tag}'s private messages! If they do not receive the message, please ask them to unlock their private!`)
+                    .setImage(config.gif) // Use the URL from config.json
+                    .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                    .setTimestamp();
+                
+                // Add cookie details to success message
+                if (validCookieDetails) {
+                    if (category === 'spotify') {
+                        successEmbed.addFields([
+                            {
+                                name: 'Cookie Details',
+                                value: `Plan: ${validCookieDetails.plan || 'Unknown'}\n` +
+                                      `Country: ${validCookieDetails.country || 'Unknown'}\n` +
+                                      (validCookieDetails.email ? `Email: ${validCookieDetails.email}` : '')
+                            }
+                        ]);
+                    } else if (category === 'netflix') {
+                        successEmbed.addFields([
+                            {
+                                name: 'Cookie Details',
+                                value: `Quality: ${validCookieDetails.quality || 'Unknown'}\n` +
+                                      `Region: ${validCookieDetails.region || 'Unknown'}`
+                            }
+                        ]);
+                    }
+                }
+                
+                await processingMessage.edit({ embeds: [successEmbed] });
             } catch (err) {
                 console.error(`Failed to send message to ${mentionedUser.tag}: ${err}`);
                 await processingMessage.edit({
