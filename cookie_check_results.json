@@ -14,6 +14,7 @@
   "archives_processed": 0,
   "valid_cookies": [],
   "messages": [
-    "\u26a0 No valid Spotify cookies found in test.txt"
-  ]
+    "\u26a0 No valid Spotify cookies found in manual_test.txt"
+  ],
+  "processing_time_seconds": 0.0004305839538574219
 }

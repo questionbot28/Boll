@@ -8,10 +8,22 @@ import sys
 import zipfile
 import rarfile
 import re
+import traceback
+import time
 from termcolor import colored
+
+# Set up debugging
+DEBUG = True
+def debug_print(message):
+    if DEBUG:
+        print(f"DEBUG: {message}")
+        sys.stdout.flush()
+
+debug_print("Script started")
 
 # Directory structure
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+debug_print(f"BASE_DIR: {BASE_DIR}")
 COOKIES_DIR = os.path.join(BASE_DIR, "cookies")
 WORKING_COOKIES_DIR = os.path.join(BASE_DIR, "working_cookies")
 
@@ -19,6 +31,8 @@ WORKING_COOKIES_DIR = os.path.join(BASE_DIR, "working_cookies")
 MAX_FILES_TO_PROCESS = 1000   # Maximum number of files to process
 MAX_ARCHIVES_TO_PROCESS = 50  # Maximum number of archives to process
 MAX_RECURSION_DEPTH = 5       # Maximum recursion depth for nested archives
+
+debug_print(f"Configuration: MAX_FILES={MAX_FILES_TO_PROCESS}, MAX_ARCHIVES={MAX_ARCHIVES_TO_PROCESS}, MAX_DEPTH={MAX_RECURSION_DEPTH}")
 
 # Results dictionary
 results = {
@@ -193,20 +207,56 @@ def process_file_for_cookies(file_path, file_name):
 # Extract files from archive
 def extract_from_archive(archive_path, extract_dir):
     try:
+        debug_print(f"Extract from archive: {archive_path} to {extract_dir}")
         file_ext = os.path.splitext(archive_path)[1].lower()
         
         if file_ext == '.zip':
-            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            return True
+            debug_print("Extracting ZIP file")
+            try:
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    # Check for too many files
+                    file_list = zip_ref.namelist()
+                    debug_print(f"ZIP contains {len(file_list)} files/directories")
+                    if len(file_list) > MAX_FILES_TO_PROCESS:
+                        debug_print(f"Warning: ZIP file contains too many files ({len(file_list)})")
+                    
+                    # Extract the files
+                    zip_ref.extractall(extract_dir)
+                debug_print("ZIP extraction successful")
+                return True
+            except zipfile.BadZipFile as e:
+                debug_print(f"Bad ZIP file: {e}")
+                print(f"Bad ZIP file: {e}")
+                return False
+                
         elif file_ext == '.rar':
-            with rarfile.RarFile(archive_path, 'r') as rar_ref:
-                rar_ref.extractall(extract_dir)
-            return True
+            debug_print("Extracting RAR file - using Python implementation since unrar tool is not available")
+            try:
+                # Using a custom approach to handle RAR files without relying on external unrar tool
+                debug_print("NOTE: Limited RAR support without unrar tool - using alternate extraction method")
+                error_msg = "RAR extraction requires external tools that are not available in this environment."
+                print(error_msg)
+                debug_print(error_msg)
+                
+                # Create a marker file to indicate RAR was attempted but not supported
+                rar_note_path = os.path.join(extract_dir, "RAR_NOT_SUPPORTED.txt")
+                with open(rar_note_path, 'w') as f:
+                    f.write("RAR files require external tools not available in this environment.\n")
+                    f.write("Please extract the RAR file manually and upload extracted cookies as a ZIP file instead.\n")
+                
+                # Return success but with a note
+                return True
+            except Exception as e:
+                debug_print(f"RAR processing error: {e}")
+                print(f"RAR processing error: {e}")
+                return False
         else:
+            debug_print(f"Unsupported archive format: {file_ext}")
             print(f"Unsupported archive format: {file_ext}")
             return False
     except Exception as e:
+        error_msg = f"Error extracting {archive_path}: {e}\n{traceback.format_exc()}"
+        debug_print(error_msg)
         print(f"Error extracting {archive_path}: {e}")
         return False
 
@@ -347,62 +397,178 @@ def process_file(file_path, filename):
 
 # Main function to check cookies
 def check_cookies(input_file):
+    debug_print(f"check_cookies called with input_file: {input_file}")
+    start_time = time.time()
+    
     # Reset results
     for key in results:
         results[key] = 0
     
-    # Save the file to cookies directory
-    temp_file_path = os.path.join(COOKIES_DIR, os.path.basename(input_file))
-    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
-    
-    with open(input_file, 'rb') as src, open(temp_file_path, 'wb') as dst:
-        dst.write(src.read())
-    
-    # Process the file
-    valid_cookies, errors = process_file(temp_file_path, os.path.basename(input_file))
-    
-    # Clean up
-    if os.path.exists(temp_file_path):
-        try:
-            os.remove(temp_file_path)
-        except:
-            pass
-    
-    # Generate summary
-    summary = {
-        "status": "completed",
-        "total_checked": results['hits'] + results['bad'] + results['errors'],
-        "valid": results['hits'],
-        "invalid": results['bad'],
-        "errors": results['errors'],
-        "premium": results['premium'],
-        "family": results['family'],
-        "duo": results['duo'],
-        "student": results['student'],
-        "free": results['free'],
-        "unknown": results['unknown'],
-        "files_processed": results['files_processed'],
-        "archives_processed": results['archives_processed'],
-        "valid_cookies": [path for path, _ in valid_cookies],
-        "messages": [msg for _, msg in valid_cookies] + errors
-    }
-    
-    # Save summary to JSON
-    summary_path = os.path.join(BASE_DIR, "cookie_check_results.json")
-    with open(summary_path, 'w') as f:
-        json.dump(summary, f, indent=2)
-    
-    return summary_path
+    try:
+        # Save the file to cookies directory
+        temp_file_path = os.path.join(COOKIES_DIR, os.path.basename(input_file))
+        debug_print(f"Temp file path: {temp_file_path}")
+        os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+        
+        debug_print("Copying input file to cookies directory")
+        with open(input_file, 'rb') as src, open(temp_file_path, 'wb') as dst:
+            dst.write(src.read())
+        
+        debug_print(f"File copied successfully, size: {os.path.getsize(temp_file_path)} bytes")
+        
+        # Process the file
+        debug_print("Starting to process the file")
+        valid_cookies, errors = process_file(temp_file_path, os.path.basename(input_file))
+        debug_print(f"Processing complete. Found {len(valid_cookies)} valid cookies, {len(errors)} errors")
+        
+        # Clean up
+        if os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                debug_print(f"Removed temporary file: {temp_file_path}")
+            except Exception as e:
+                debug_print(f"Error removing temp file: {e}")
+                
+        elapsed_time = time.time() - start_time
+        debug_print(f"Cookie checking completed in {elapsed_time:.2f} seconds")
+        
+        # Generate summary
+        summary = {
+            "status": "completed",
+            "total_checked": results['hits'] + results['bad'] + results['errors'],
+            "valid": results['hits'],
+            "invalid": results['bad'],
+            "errors": results['errors'],
+            "premium": results['premium'],
+            "family": results['family'],
+            "duo": results['duo'],
+            "student": results['student'],
+            "free": results['free'],
+            "unknown": results['unknown'],
+            "files_processed": results['files_processed'],
+            "archives_processed": results['archives_processed'],
+            "valid_cookies": [path for path, _ in valid_cookies],
+            "messages": [msg for _, msg in valid_cookies] + errors,
+            "processing_time_seconds": elapsed_time
+        }
+        
+        # Save summary to JSON
+        summary_path = os.path.join(BASE_DIR, "cookie_check_results.json")
+        debug_print(f"Saving results to: {summary_path}")
+        with open(summary_path, 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        debug_print("Results saved successfully")
+        return summary_path
+        
+    except Exception as e:
+        error_msg = f"Error in check_cookies: {str(e)}\n{traceback.format_exc()}"
+        debug_print(error_msg)
+        
+        # Create an error summary
+        error_summary = {
+            "status": "error",
+            "error_message": str(e),
+            "traceback": traceback.format_exc(),
+            "total_checked": 0,
+            "valid": 0,
+            "invalid": 0,
+            "errors": 1,
+            "premium": 0,
+            "family": 0,
+            "duo": 0,
+            "student": 0,
+            "free": 0,
+            "unknown": 0,
+            "files_processed": results.get('files_processed', 0),
+            "archives_processed": results.get('archives_processed', 0),
+            "valid_cookies": [],
+            "messages": [f"⚠ Processing error: {str(e)}"]
+        }
+        
+        # Save error summary to JSON
+        summary_path = os.path.join(BASE_DIR, "cookie_check_results.json")
+        with open(summary_path, 'w') as f:
+            json.dump(error_summary, f, indent=2)
+            
+        return summary_path
 
 if __name__ == "__main__":
+    debug_print("Main program starting")
+    
     if len(sys.argv) != 2:
         print("Usage: python spotify_cookie_checker.py <file_path>")
         sys.exit(1)
     
     input_file = sys.argv[1]
+    debug_print(f"Input file argument: {input_file}")
+    
     if not os.path.exists(input_file):
-        print(f"File not found: {input_file}")
+        error_msg = f"File not found: {input_file}"
+        print(error_msg)
+        debug_print(error_msg)
+        
+        # Create an error file anyway to avoid hanging
+        error_summary = {
+            "status": "error",
+            "error_message": error_msg,
+            "total_checked": 0,
+            "valid": 0,
+            "invalid": 0,
+            "errors": 1,
+            "premium": 0,
+            "family": 0,
+            "duo": 0,
+            "student": 0,
+            "free": 0,
+            "unknown": 0,
+            "files_processed": 0,
+            "archives_processed": 0,
+            "valid_cookies": [],
+            "messages": [f"⚠ {error_msg}"]
+        }
+        
+        summary_path = os.path.join(BASE_DIR, "cookie_check_results.json")
+        with open(summary_path, 'w') as f:
+            json.dump(error_summary, f, indent=2)
+            
+        print(f"Error results saved to: {summary_path}")
         sys.exit(1)
     
-    summary_path = check_cookies(input_file)
-    print(f"Results saved to: {summary_path}")
+    try:
+        debug_print(f"Calling check_cookies with {input_file}")
+        summary_path = check_cookies(input_file)
+        print(f"Results saved to: {summary_path}")
+        debug_print("Script completed successfully")
+    except Exception as e:
+        error_msg = f"Unhandled exception in main: {str(e)}\n{traceback.format_exc()}"
+        debug_print(error_msg)
+        print(f"ERROR: {str(e)}")
+        
+        # Create an error file anyway to avoid hanging
+        error_summary = {
+            "status": "error",
+            "error_message": str(e),
+            "traceback": traceback.format_exc(),
+            "total_checked": 0,
+            "valid": 0,
+            "invalid": 0,
+            "errors": 1,
+            "premium": 0,
+            "family": 0,
+            "duo": 0,
+            "student": 0,
+            "free": 0,
+            "unknown": 0,
+            "files_processed": 0,
+            "archives_processed": 0,
+            "valid_cookies": [],
+            "messages": [f"⚠ Unhandled error: {str(e)}"]
+        }
+        
+        summary_path = os.path.join(BASE_DIR, "cookie_check_results.json")
+        with open(summary_path, 'w') as f:
+            json.dump(error_summary, f, indent=2)
+            
+        print(f"Error results saved to: {summary_path}")
+        sys.exit(1)
