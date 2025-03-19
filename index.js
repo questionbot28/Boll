@@ -1276,6 +1276,21 @@ async function handleCodeRedemption(interaction, code) {
 
 // Handle interactions (buttons, dropdowns, and modals)
 client.on('interactionCreate', async interaction => {
+    // Handle giveaway button interactions
+    if (interaction.isButton() && interaction.customId.startsWith('gw_join_')) {
+        try {
+            const gwCommand = require('./commands/main/gw');
+            await gwCommand.handleButtonInteraction(interaction);
+        } catch (error) {
+            console.error('Error handling giveaway button interaction:', error);
+            await interaction.reply({ 
+                content: 'An error occurred while processing your entry. Please try again later.',
+                ephemeral: true 
+            });
+        }
+        return;
+    }
+
     // Handle ticket menu selection
     if (interaction.isSelectMenu() && interaction.customId === 'ticket_menu') {
         await handleTicketCreation(interaction, interaction.values[0]);
