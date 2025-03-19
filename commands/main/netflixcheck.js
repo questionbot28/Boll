@@ -66,8 +66,8 @@ module.exports = {
                 ]
             });
 
-            // Run the Python script to check the cookies
-            const pythonProcess = spawn('python', ['netflix_cookie_checker.py', netflixDir]);
+            // Run the Python script to check only the uploaded file
+            const pythonProcess = spawn('python', ['netflix_cookie_checker.py', filePath]);
 
             let outputData = '';
             let errorData = '';

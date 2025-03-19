@@ -405,4 +405,27 @@ def check_cookie(cookie_content):
 if __name__ == "__main__":
     colorama.init()
     print_banner()
-    check_netflix_cookies()
+    
+    import sys
+    
+    # Check if a specific file path was provided as an argument
+    if len(sys.argv) > 1:
+        filepath = sys.argv[1]
+        if os.path.isfile(filepath):
+            # Setup directories
+            setup_directories()
+            
+            # If checking a single file
+            debug_print(f"Checking single cookie file: {filepath}")
+            
+            # Process the single file and get the result
+            result = process_cookie_file(filepath)
+            
+            # Print statistics
+            print_statistics()
+        else:
+            # If it's a directory, check all files in it
+            check_netflix_cookies(filepath)
+    else:
+        # Default behavior with no arguments - check netflix directory
+        check_netflix_cookies()
