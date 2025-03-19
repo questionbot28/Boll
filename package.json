@@ -27,6 +27,7 @@
     "@discordjs/rest": "^2.4.3",
     "@google/generative-ai": "^0.24.0",
     "adm-zip": "^0.5.10",
+    "archiver": "^7.0.1",
     "axios": "^1.8.3",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.3",
