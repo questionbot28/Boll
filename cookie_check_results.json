@@ -1,0 +1,15 @@
+{
+  "status": "completed",
+  "total_checked": 0,
+  "valid": 0,
+  "invalid": 0,
+  "errors": 0,
+  "premium": 0,
+  "family": 0,
+  "duo": 0,
+  "student": 0,
+  "free": 0,
+  "unknown": 0,
+  "valid_cookies": [],
+  "messages": []
+}

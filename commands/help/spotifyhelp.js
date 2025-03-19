@@ -17,9 +17,10 @@ module.exports = {
             .addField('How It Works',
                 '1. Upload a file containing Spotify cookies with your command\n' +
                 '2. The bot will download and process the file\n' +
-                '3. Valid cookies are categorized by account type (Premium, Family, etc.)\n' +
-                '4. Results are displayed in the channel\n' +
-                '5. Valid cookies are sent as a downloadable file'
+                '3. The bot will recursively check all folders and nested archives\n' +
+                '4. Valid cookies are categorized by account type (Premium, Family, etc.)\n' +
+                '5. Results are displayed in the channel\n' +
+                '6. Valid cookies are sent as a downloadable zip file'
             )
             .addField('Example', 'Type `.spotifycheck` and attach your cookie file')
             .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })

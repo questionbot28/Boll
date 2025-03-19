@@ -134,7 +134,9 @@ module.exports = {
                         `Total Checked: ${results.total_checked}\n` +
                         `Valid Accounts: ${results.valid}\n` +
                         `Invalid Accounts: ${results.invalid}\n` +
-                        `Errors: ${results.errors}`
+                        `Errors: ${results.errors}\n` +
+                        `Files Processed: ${results.files_processed}\n` +
+                        `Archives Processed: ${results.archives_processed}`
                     )
                     .addField('Account Types', 
                         `Premium: ${results.premium}\n` +
@@ -217,7 +219,8 @@ module.exports = {
                                         `File: ${attachment.name}\n` +
                                         `Valid: ${results.valid}\n` +
                                         `Premium: ${results.premium}, Family: ${results.family}, Duo: ${results.duo}\n` +
-                                        `Student: ${results.student}, Free: ${results.free}, Unknown: ${results.unknown}`
+                                        `Student: ${results.student}, Free: ${results.free}, Unknown: ${results.unknown}\n` +
+                                        `Files Processed: ${results.files_processed}, Archives Processed: ${results.archives_processed}`
                                     )
                                     .setTimestamp()
                             ]

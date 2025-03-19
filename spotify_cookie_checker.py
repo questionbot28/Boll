@@ -19,7 +19,8 @@ WORKING_COOKIES_DIR = os.path.join(BASE_DIR, "working_cookies")
 results = {
     'hits': 0, 'bad': 0, 'errors': 0,
     'family': 0, 'duo': 0, 'student': 0,
-    'premium': 0, 'free': 0, 'unknown': 0
+    'premium': 0, 'free': 0, 'unknown': 0,
+    'files_processed': 0, 'archives_processed': 0
 }
 lock = threading.Lock()
 
@@ -88,7 +89,16 @@ def remove_unwanted_content(cookie_content):
 def is_cookie_line(line):
     # Check if line has typical cookie format with domain, path, etc.
     parts = line.strip().split('\t')
-    return len(parts) >= 7
+    return len(parts) >= 7 and 'spotify' in line.lower()
+
+# Extract cookies from content
+def extract_cookies_from_content(content):
+    cookies = []
+    for line in content.splitlines():
+        if is_cookie_line(line):
+            cookies.append(line)
+    
+    return '\n'.join(cookies) if cookies else None
 
 # Extract cookies from file
 def extract_cookies_from_file(file_path):
@@ -96,12 +106,7 @@ def extract_cookies_from_file(file_path):
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
         
-        cookies = []
-        for line in content.splitlines():
-            if is_cookie_line(line):
-                cookies.append(line)
-        
-        return '\n'.join(cookies) if cookies else None
+        return extract_cookies_from_content(content)
     except Exception as e:
         print(f"Error reading file {file_path}: {e}")
         return None
@@ -166,6 +171,17 @@ def check_single_cookie(cookie_content, filename):
             results['errors'] += 1
         return None, f"⚠ Error checking {filename}: {e}"
 
+# Process a file for cookies
+def process_file_for_cookies(file_path, file_name):
+    with lock:
+        results['files_processed'] += 1
+    
+    cookie_content = extract_cookies_from_file(file_path)
+    if cookie_content:
+        return check_single_cookie(cookie_content, file_name)
+    else:
+        return None, f"⚠ No valid Spotify cookies found in {file_name}"
+
 # Extract files from archive
 def extract_from_archive(archive_path, extract_dir):
     try:
@@ -186,57 +202,99 @@ def extract_from_archive(archive_path, extract_dir):
         print(f"Error extracting {archive_path}: {e}")
         return False
 
-# Process a single file
+# Recursively process a directory
+def process_directory(directory, base_file_name, valid_cookies, errors):
+    # Walk through all files in directory and subdirectories
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            file_ext = os.path.splitext(file)[1].lower()
+            
+            # Process archives recursively
+            if file_ext in ['.zip', '.rar']:
+                with lock:
+                    results['archives_processed'] += 1
+                
+                # Extract nested archive to a temporary directory
+                nested_dir = os.path.join(directory, f"nested_{os.path.splitext(file)[0]}")
+                os.makedirs(nested_dir, exist_ok=True)
+                
+                if extract_from_archive(file_path, nested_dir):
+                    # Process the extracted contents
+                    process_directory(nested_dir, f"{base_file_name}_{os.path.splitext(file)[0]}", valid_cookies, errors)
+                    
+                    # Clean up nested directory
+                    for r, d, f in os.walk(nested_dir, topdown=False):
+                        for name in f:
+                            os.remove(os.path.join(r, name))
+                        for name in d:
+                            os.rmdir(os.path.join(r, name))
+                    os.rmdir(nested_dir)
+            
+            # Process text files
+            elif file_ext == '.txt':
+                relative_path = os.path.relpath(file_path, directory)
+                file_display_name = f"{base_file_name}/{relative_path}"
+                
+                cookie_path, message = process_file_for_cookies(file_path, file_display_name)
+                if cookie_path:
+                    valid_cookies.append((cookie_path, message))
+                else:
+                    errors.append(message)
+
+# Process a file (txt, zip, rar)
 def process_file(file_path, filename):
     file_ext = os.path.splitext(file_path)[1].lower()
+    valid_cookies = []
+    errors = []
     
     # Handle archives
     if file_ext in ['.zip', '.rar']:
+        with lock:
+            results['archives_processed'] += 1
+        
         temp_extract_dir = os.path.join(COOKIES_DIR, os.path.splitext(filename)[0])
         os.makedirs(temp_extract_dir, exist_ok=True)
         
         if extract_from_archive(file_path, temp_extract_dir):
-            valid_cookies = []
-            errors = []
-            
-            # Walk through extracted files
-            for root, _, files in os.walk(temp_extract_dir):
-                for extracted_file in files:
-                    if extracted_file.endswith('.txt'):
-                        extracted_path = os.path.join(root, extracted_file)
-                        cookie_content = extract_cookies_from_file(extracted_path)
-                        
-                        if cookie_content:
-                            cookie_path, message = check_single_cookie(cookie_content, extracted_file)
-                            if cookie_path:
-                                valid_cookies.append((cookie_path, message))
-                            else:
-                                errors.append(message)
+            # Process the extracted directory recursively
+            process_directory(temp_extract_dir, os.path.splitext(filename)[0], valid_cookies, errors)
             
             # Clean up temp directory
             for root, dirs, files in os.walk(temp_extract_dir, topdown=False):
                 for name in files:
-                    os.remove(os.path.join(root, name))
+                    try:
+                        os.remove(os.path.join(root, name))
+                    except:
+                        pass
                 for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(temp_extract_dir)
+                    try:
+                        os.rmdir(os.path.join(root, name))
+                    except:
+                        pass
+            try:
+                os.rmdir(temp_extract_dir)
+            except:
+                pass
             
             return valid_cookies, errors
     
     # Handle txt files
     elif file_ext == '.txt':
-        cookie_content = extract_cookies_from_file(file_path)
-        if cookie_content:
-            cookie_path, message = check_single_cookie(cookie_content, filename)
-            if cookie_path:
-                return [(cookie_path, message)], []
-            else:
-                return [], [message]
+        cookie_path, message = process_file_for_cookies(file_path, filename)
+        if cookie_path:
+            return [(cookie_path, message)], []
+        else:
+            return [], [message]
     
     return [], [f"Unsupported file format: {file_ext}"]
 
 # Main function to check cookies
 def check_cookies(input_file):
+    # Reset results
+    for key in results:
+        results[key] = 0
+    
     # Save the file to cookies directory
     temp_file_path = os.path.join(COOKIES_DIR, os.path.basename(input_file))
     os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
@@ -249,7 +307,10 @@ def check_cookies(input_file):
     
     # Clean up
     if os.path.exists(temp_file_path):
-        os.remove(temp_file_path)
+        try:
+            os.remove(temp_file_path)
+        except:
+            pass
     
     # Generate summary
     summary = {
@@ -264,6 +325,8 @@ def check_cookies(input_file):
         "student": results['student'],
         "free": results['free'],
         "unknown": results['unknown'],
+        "files_processed": results['files_processed'],
+        "archives_processed": results['archives_processed'],
         "valid_cookies": [path for path, _ in valid_cookies],
         "messages": [msg for _, msg in valid_cookies] + errors
     }
