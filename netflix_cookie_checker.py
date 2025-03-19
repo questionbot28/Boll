@@ -7,6 +7,8 @@ import re
 import json
 import time
 import traceback
+import zipfile
+import rarfile
 from datetime import datetime
 
 # Global counters
@@ -19,6 +21,8 @@ lock = threading.Lock()
 
 # Global paths
 working_cookies_dir = "working_cookies"
+temp_dir = "temp"
+MAX_RECURSION_DEPTH = 5  # Prevent infinite recursion
 dirs = {
     "netflix": {
         "root": "netflix", 

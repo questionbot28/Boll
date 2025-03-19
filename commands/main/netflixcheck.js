@@ -147,43 +147,16 @@ module.exports = {
                 // Update the status message with the results
                 await statusMessage.edit({ embeds: [resultsEmbed] });
                 
-                // Send a summary of working cookies if any
+                // Send a simple summary of working cookies if any
                 if (workingFiles.length > 0) {
-                    // Create a summary message
+                    // Create a summary message without detailed cookie info
                     const workingSummary = new MessageEmbed()
                         .setColor(config.color?.green || '#00ff00')
                         .setTitle('Working Netflix Cookies')
-                        .setDescription(`Found ${workingFiles.length} working Netflix cookies! Use \`.csend @user netflix\` to send them.`)
+                        .setDescription(`Found ${workingFiles.length} working Netflix cookies! Use \`.csend @user netflix\` to send them and see detailed information.`)
                         .setImage('https://cdn.discordapp.com/attachments/1263458101886193725/1349031252216250503/350kb.gif?ex=67db8202&is=67da3082&hm=87a320f2ce832ed433016bb268feba16068c2d03cc7905166f7c1996b9cfb569&')
                         .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
                         .setTimestamp();
-                    
-                    // Add information about the first 5 cookies (if available)
-                    const cookiesToShow = Math.min(5, workingFiles.length);
-                    for (let i = 0; i < cookiesToShow; i++) {
-                        const cookieFile = workingFiles[i];
-                        try {
-                            const cookieContent = fs.readFileSync(path.join(workingDir, cookieFile), 'utf8');
-                            
-                            // Extract cookie details
-                            const planMatch = cookieContent.match(/PLAN:\s*([^\r\n]+)/i);
-                            const countryMatch = cookieContent.match(/COUNTRY:\s*([^\r\n]+)/i);
-                            const streamsMatch = cookieContent.match(/MAX STREAMS:\s*([^\r\n]+)/i);
-                            const extraMembersMatch = cookieContent.match(/EXTRA MEMBERS:\s*([^\r\n]+)/i);
-                            
-                            const plan = planMatch && planMatch[1] ? planMatch[1].trim() : 'Unknown';
-                            const country = countryMatch && countryMatch[1] ? countryMatch[1].trim() : 'Unknown';
-                            const streams = streamsMatch && streamsMatch[1] ? streamsMatch[1].trim() : 'Unknown';
-                            const extraMembers = extraMembersMatch && extraMembersMatch[1] ? extraMembersMatch[1].trim() : 'Unknown';
-                            
-                            workingSummary.addField(`Cookie ${i+1}`, 
-                                `Plan: ${plan}\nCountry: ${country}\nMax Streams: ${streams}\nExtra Members: ${extraMembers}`, 
-                                true);
-                        } catch (err) {
-                            console.error(`Error reading cookie file ${cookieFile}: ${err}`);
-                            workingSummary.addField(`Cookie ${i+1}`, 'Error reading cookie details', true);
-                        }
-                    }
                     
                     await message.channel.send({ embeds: [workingSummary] });
                 }
