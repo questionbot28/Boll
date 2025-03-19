@@ -15,6 +15,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COOKIES_DIR = os.path.join(BASE_DIR, "cookies")
 WORKING_COOKIES_DIR = os.path.join(BASE_DIR, "working_cookies")
 
+# Maximum limits to prevent hanging
+MAX_FILES_TO_PROCESS = 1000   # Maximum number of files to process
+MAX_ARCHIVES_TO_PROCESS = 50  # Maximum number of archives to process
+MAX_RECURSION_DEPTH = 5       # Maximum recursion depth for nested archives
+
 # Results dictionary
 results = {
     'hits': 0, 'bad': 0, 'errors': 0,
@@ -175,6 +180,9 @@ def check_single_cookie(cookie_content, filename):
 def process_file_for_cookies(file_path, file_name):
     with lock:
         results['files_processed'] += 1
+        # Check if we've reached the file processing limit
+        if results['files_processed'] > MAX_FILES_TO_PROCESS:
+            return None, f"⚠ Maximum file processing limit reached ({MAX_FILES_TO_PROCESS}). Skipping remaining files."
     
     cookie_content = extract_cookies_from_file(file_path)
     if cookie_content:
@@ -204,43 +212,82 @@ def extract_from_archive(archive_path, extract_dir):
 
 # Recursively process a directory
 def process_directory(directory, base_file_name, valid_cookies, errors):
-    # Walk through all files in directory and subdirectories
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            file_path = os.path.join(root, file)
-            file_ext = os.path.splitext(file)[1].lower()
+    # Add a safety check for extremely deep recursion
+    if len(base_file_name.split('_')) > MAX_RECURSION_DEPTH:
+        print(f"WARNING: Reached max recursion depth with {base_file_name}")
+        errors.append(f"⚠ Maximum recursion depth ({MAX_RECURSION_DEPTH}) reached in {base_file_name}")
+        return
+    
+    print(f"Scanning directory: {directory}")
+    
+    try:
+        # Walk through all files in directory and subdirectories
+        for root, dirs, files in os.walk(directory):
+            print(f"In directory {root}, found {len(files)} files and {len(dirs)} subdirectories")
             
-            # Process archives recursively
-            if file_ext in ['.zip', '.rar']:
-                with lock:
-                    results['archives_processed'] += 1
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_ext = os.path.splitext(file)[1].lower()
                 
-                # Extract nested archive to a temporary directory
-                nested_dir = os.path.join(directory, f"nested_{os.path.splitext(file)[0]}")
-                os.makedirs(nested_dir, exist_ok=True)
-                
-                if extract_from_archive(file_path, nested_dir):
-                    # Process the extracted contents
-                    process_directory(nested_dir, f"{base_file_name}_{os.path.splitext(file)[0]}", valid_cookies, errors)
+                # Process archives recursively
+                if file_ext in ['.zip', '.rar']:
+                    with lock:
+                        results['archives_processed'] += 1
+                        # Check if we've reached the archive processing limit
+                        if results['archives_processed'] > MAX_ARCHIVES_TO_PROCESS:
+                            print(f"WARNING: Maximum archive processing limit reached ({MAX_ARCHIVES_TO_PROCESS})")
+                            errors.append(f"⚠ Maximum archive processing limit reached ({MAX_ARCHIVES_TO_PROCESS}). Skipping remaining archives.")
+                            continue
                     
-                    # Clean up nested directory
-                    for r, d, f in os.walk(nested_dir, topdown=False):
-                        for name in f:
-                            os.remove(os.path.join(r, name))
-                        for name in d:
-                            os.rmdir(os.path.join(r, name))
-                    os.rmdir(nested_dir)
-            
-            # Process text files
-            elif file_ext == '.txt':
-                relative_path = os.path.relpath(file_path, directory)
-                file_display_name = f"{base_file_name}/{relative_path}"
+                    print(f"Found nested archive: {file} in {root}")
+                    
+                    # Extract nested archive to a temporary directory
+                    nested_dir = os.path.join(directory, f"nested_{os.path.splitext(file)[0]}")
+                    os.makedirs(nested_dir, exist_ok=True)
+                    
+                    print(f"Extracting nested archive to: {nested_dir}")
+                    
+                    if extract_from_archive(file_path, nested_dir):
+                        print(f"Successfully extracted nested archive: {file}")
+                        
+                        # Process the extracted contents
+                        process_directory(nested_dir, f"{base_file_name}_{os.path.splitext(file)[0]}", valid_cookies, errors)
+                        
+                        print(f"Cleaning up nested directory: {nested_dir}")
+                        
+                        # Clean up nested directory
+                        try:
+                            for r, d, f in os.walk(nested_dir, topdown=False):
+                                for name in f:
+                                    try:
+                                        os.remove(os.path.join(r, name))
+                                    except Exception as e:
+                                        print(f"Error removing file {os.path.join(r, name)}: {e}")
+                                for name in d:
+                                    try:
+                                        os.rmdir(os.path.join(r, name))
+                                    except Exception as e:
+                                        print(f"Error removing directory {os.path.join(r, name)}: {e}")
+                            os.rmdir(nested_dir)
+                            print(f"Successfully cleaned up: {nested_dir}")
+                        except Exception as e:
+                            print(f"Error during cleanup of nested directory: {e}")
                 
-                cookie_path, message = process_file_for_cookies(file_path, file_display_name)
-                if cookie_path:
-                    valid_cookies.append((cookie_path, message))
-                else:
-                    errors.append(message)
+                # Process text files
+                elif file_ext == '.txt':
+                    relative_path = os.path.relpath(file_path, directory)
+                    file_display_name = f"{base_file_name}/{relative_path}"
+                    
+                    print(f"Processing text file: {file_display_name}")
+                    
+                    cookie_path, message = process_file_for_cookies(file_path, file_display_name)
+                    if cookie_path:
+                        valid_cookies.append((cookie_path, message))
+                    else:
+                        errors.append(message)
+    except Exception as e:
+        print(f"Error processing directory {directory}: {e}")
+        errors.append(f"⚠ Error processing directory {directory}: {e}")
 
 # Process a file (txt, zip, rar)
 def process_file(file_path, filename):
@@ -248,35 +295,44 @@ def process_file(file_path, filename):
     valid_cookies = []
     errors = []
     
+    print(f"Processing file: {filename} with extension {file_ext}")
+    
     # Handle archives
     if file_ext in ['.zip', '.rar']:
         with lock:
             results['archives_processed'] += 1
         
+        print(f"Archive detected: {filename}. Extracting...")
+        
         temp_extract_dir = os.path.join(COOKIES_DIR, os.path.splitext(filename)[0])
         os.makedirs(temp_extract_dir, exist_ok=True)
         
         if extract_from_archive(file_path, temp_extract_dir):
+            print(f"Extraction successful for {filename}. Processing contents...")
+            
             # Process the extracted directory recursively
             process_directory(temp_extract_dir, os.path.splitext(filename)[0], valid_cookies, errors)
+            
+            print(f"Finished processing contents of {filename}. Cleaning up...")
             
             # Clean up temp directory
             for root, dirs, files in os.walk(temp_extract_dir, topdown=False):
                 for name in files:
                     try:
                         os.remove(os.path.join(root, name))
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"Error removing file {name}: {e}")
                 for name in dirs:
                     try:
                         os.rmdir(os.path.join(root, name))
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"Error removing directory {name}: {e}")
             try:
                 os.rmdir(temp_extract_dir)
-            except:
-                pass
+            except Exception as e:
+                print(f"Error removing temp directory: {e}")
             
+            print(f"Cleanup complete for {filename}.")
             return valid_cookies, errors
     
     # Handle txt files

@@ -70,22 +70,60 @@ module.exports = {
             const filePath = path.join(tempDir, attachment.name);
             await downloadFile(attachment.url, filePath);
             
-            // Run the Python script to check cookies
+            // Update the processing message with status
+            await processingMessage.edit({
+                embeds: [
+                    new MessageEmbed()
+                        .setColor(config.color.blue)
+                        .setTitle('Processing Spotify Cookies')
+                        .setDescription('File downloaded successfully. Starting cookie check process...')
+                        .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                        .setTimestamp()
+                ]
+            });
+            
+            // Run the Python script to check cookies with a timeout
+            console.log(`Starting Python process to check: ${filePath}`);
             const pythonProcess = spawn('python', ['spotify_cookie_checker.py', filePath]);
+            
+            // Add a timeout to prevent hanging
+            const timeoutMs = 300000; // 5 minutes
+            const timeout = setTimeout(() => {
+                console.log('Python process timed out - killing process');
+                pythonProcess.kill();
+                
+                processingMessage.edit({
+                    embeds: [
+                        new MessageEmbed()
+                            .setColor(config.color.red)
+                            .setTitle('Processing Timeout')
+                            .setDescription('The cookie checking process took too long and was terminated. The file may be too large or contain too many nested archives.')
+                            .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                            .setTimestamp()
+                    ]
+                });
+            }, timeoutMs);
             
             let stdoutData = '';
             let stderrData = '';
             
             pythonProcess.stdout.on('data', (data) => {
-                stdoutData += data.toString();
+                const output = data.toString();
+                stdoutData += output;
+                console.log(`Python stdout: ${output}`);
             });
             
             pythonProcess.stderr.on('data', (data) => {
-                stderrData += data.toString();
+                const error = data.toString();
+                stderrData += error;
+                console.error(`Python stderr: ${error}`);
             });
             
             pythonProcess.on('close', async (code) => {
                 console.log(`Python process exited with code ${code}`);
+                
+                // Clear the timeout
+                clearTimeout(timeout);
                 
                 // Clean up the temporary file
                 if (fs.existsSync(filePath)) {
