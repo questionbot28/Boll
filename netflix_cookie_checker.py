@@ -46,6 +46,9 @@ def setup_directories():
     
     # Create base working cookies directory if it doesn't exist
     os.makedirs(working_cookies_dir, exist_ok=True)
+    
+    # Create temporary extraction directory for archives
+    os.makedirs(os.path.join(temp_dir, "netflix", "extracted"), exist_ok=True)
 
 def print_banner():
     """Print the Netflix cookie checker banner"""
