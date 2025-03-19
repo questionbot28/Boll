@@ -204,7 +204,7 @@ module.exports = {
                                 console.error(`Error parsing cookie details: ${err.message}`);
                             }
                             
-                            // TODO: We'd want to verify the cookie here, but for now we'll just use it
+                            // We'll just use this cookie
                             validCookie = filePath;
                             validCookieContent = fileContent;
                             validCookieFilename = randomFile;
@@ -213,91 +213,163 @@ module.exports = {
                         }
                     }
                 }
-            } else {
-                // For other categories like Netflix, just pick a random file
-                const folderPath = `./${category}/`;
+            } else if (category === 'netflix') {
+                // For Netflix, check the working_cookies/netflix/premium directory first
+                const workingCookiesDir = path.join(__dirname, '../../working_cookies/netflix/premium');
                 
-                if (!fs.existsSync(folderPath)) {
-                    await processingMessage.edit({
-                        embeds: [
-                            new MessageEmbed()
-                                .setColor(config.color.red || '#ff0000')
-                                .setTitle('Folder Not Found')
-                                .setDescription(`The ${category} folder was not found.`)
-                                .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                                .setTimestamp()
-                        ]
-                    });
-                    return;
+                if (fs.existsSync(workingCookiesDir)) {
+                    const cookieFiles = fs.readdirSync(workingCookiesDir).filter(file => file.endsWith('.txt'));
+                    
+                    if (cookieFiles.length > 0) {
+                        // Get a random file from this folder
+                        const randomFile = cookieFiles[Math.floor(Math.random() * cookieFiles.length)];
+                        const filePath = path.join(workingCookiesDir, randomFile);
+                        
+                        // Check if the cookie is valid
+                        await processingMessage.edit({
+                            embeds: [
+                                new MessageEmbed()
+                                    .setColor(config.color.blue || '#0099ff')
+                                    .setTitle(`Checking Cookie`)
+                                    .setDescription(`Checking Netflix cookie: ${randomFile}`)
+                                    .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                                    .setTimestamp()
+                            ]
+                        });
+                        
+                        // Read the cookie file
+                        const cookieContent = fs.readFileSync(filePath, 'utf8');
+                        
+                        // Extract cookie details from the file
+                        let cookieDetails = {
+                            plan: 'Unknown',
+                            country: 'Unknown',
+                            maxStreams: 'Unknown',
+                            extraMembers: 'Unknown',
+                            memberSince: 'Unknown',
+                            type: 'Netflix Premium'
+                        };
+                        
+                        // Try to parse details from the file content
+                        try {
+                            // Look for plan, country, streams, members details in the content
+                            const planMatch = cookieContent.match(/PLAN\s*:\s*([^\r\n]+)/i);
+                            const countryMatch = cookieContent.match(/COUNTRY\s*:\s*([^\r\n]+)/i);
+                            const streamsMatch = cookieContent.match(/MAX STREAMS\s*:\s*([^\r\n]+)/i);
+                            const extraMembersMatch = cookieContent.match(/EXTRA MEMBERS\s*:\s*([^\r\n]+)/i);
+                            const memberSinceMatch = cookieContent.match(/MEMBER SINCE\s*:\s*([^\r\n]+)/i);
+                            
+                            if (planMatch && planMatch[1]) cookieDetails.plan = planMatch[1].trim();
+                            if (countryMatch && countryMatch[1]) cookieDetails.country = countryMatch[1].trim();
+                            if (streamsMatch && streamsMatch[1]) cookieDetails.maxStreams = streamsMatch[1].trim();
+                            if (extraMembersMatch && extraMembersMatch[1]) cookieDetails.extraMembers = extraMembersMatch[1].trim();
+                            if (memberSinceMatch && memberSinceMatch[1]) cookieDetails.memberSince = memberSinceMatch[1].trim();
+                        } catch (err) {
+                            console.error(`Error parsing cookie details: ${err.message}`);
+                        }
+                        
+                        // We found a cookie!
+                        validCookie = filePath;
+                        validCookieContent = cookieContent;
+                        validCookieFilename = randomFile;
+                        validCookieDetails = cookieDetails;
+                    }
                 }
                 
-                const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.txt'));
-                
-                if (files.length === 0) {
-                    await processingMessage.edit({
-                        embeds: [
-                            new MessageEmbed()
-                                .setColor(config.color.red || '#ff0000')
-                                .setTitle('No Files Found')
-                                .setDescription(`No files found in the ${category} category.`)
-                                .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                                .setTimestamp()
-                        ]
-                    });
-                    return;
-                }
-                
-                const randomFile = files[Math.floor(Math.random() * files.length)];
-                const filePath = `${folderPath}${randomFile}`;
-                
-                // Check if file exists
-                if (!fs.existsSync(filePath)) {
-                    await processingMessage.edit({
-                        embeds: [
-                            new MessageEmbed()
-                                .setColor(config.color.red || '#ff0000')
-                                .setTitle('File Not Found')
-                                .setDescription(`File ${randomFile} not found in the ${category} folder.`)
-                                .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                                .setTimestamp()
-                        ]
-                    });
-                    return;
-                }
-                
-                // Read file content
-                const fileContent = fs.readFileSync(filePath, 'utf8');
-                
-                // Try to parse cookie details for Netflix too
-                let cookieDetails = {
-                    type: 'Netflix',
-                    quality: randomFile.includes('UHD') ? 'UHD/4K' : (randomFile.includes('HD') ? 'HD' : 'Standard'),
-                    region: 'Unknown'
-                };
-                
-                try {
-                    // Try to extract from the filename or path
-                    if (randomFile.includes('US') || filePath.includes('US')) {
-                        cookieDetails.region = 'US';
-                    } else if (randomFile.includes('UK') || filePath.includes('UK')) {
-                        cookieDetails.region = 'UK';
-                    } else if (randomFile.includes('EU') || filePath.includes('EU')) {
-                        cookieDetails.region = 'EU';
+                // If we didn't find a valid cookie in working_cookies, check the regular netflix directory
+                if (!validCookie) {
+                    const folderPath = `./${category}/`;
+                    
+                    if (!fs.existsSync(folderPath)) {
+                        await processingMessage.edit({
+                            embeds: [
+                                new MessageEmbed()
+                                    .setColor(config.color.red || '#ff0000')
+                                    .setTitle('Folder Not Found')
+                                    .setDescription(`The ${category} folder was not found.`)
+                                    .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                                    .setTimestamp()
+                            ]
+                        });
+                        return;
                     }
                     
-                    // Look for region in the content if not found in filename
-                    if (cookieDetails.region === 'Unknown') {
-                        const regionMatch = fileContent.match(/Region\s*:\s*([^\r\n]+)/i);
-                        if (regionMatch && regionMatch[1]) cookieDetails.region = regionMatch[1].trim();
+                    const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.txt'));
+                    
+                    if (files.length === 0) {
+                        await processingMessage.edit({
+                            embeds: [
+                                new MessageEmbed()
+                                    .setColor(config.color.red || '#ff0000')
+                                    .setTitle('No Files Found')
+                                    .setDescription(`No files found in the ${category} category.`)
+                                    .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                                    .setTimestamp()
+                            ]
+                        });
+                        return;
                     }
-                } catch (err) {
-                    console.error(`Error parsing Netflix cookie details: ${err.message}`);
+                    
+                    // Try up to 5 random files
+                    const maxAttempts = Math.min(5, files.length);
+                    for (let i = 0; i < maxAttempts; i++) {
+                        const randomIndex = Math.floor(Math.random() * files.length);
+                        const randomFile = files[randomIndex];
+                        const filePath = `${folderPath}${randomFile}`;
+                        
+                        // Check if file exists
+                        if (!fs.existsSync(filePath)) {
+                            continue;
+                        }
+                        
+                        await processingMessage.edit({
+                            embeds: [
+                                new MessageEmbed()
+                                    .setColor(config.color.blue || '#0099ff')
+                                    .setTitle(`Checking Cookie`)
+                                    .setDescription(`Checking Netflix cookie: ${randomFile} (attempt ${i+1}/${maxAttempts})`)
+                                    .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                                    .setTimestamp()
+                            ]
+                        });
+                        
+                        // Read file content
+                        const fileContent = fs.readFileSync(filePath, 'utf8');
+                        
+                        // Basic cookie details
+                        let cookieDetails = {
+                            plan: 'Unknown',
+                            country: 'Unknown',
+                            maxStreams: 'Unknown',
+                            extraMembers: 'Unknown',
+                            memberSince: 'Unknown',
+                            type: 'Netflix'
+                        };
+                        
+                        try {
+                            // Try to extract details from the content
+                            const planMatch = fileContent.match(/PLAN\s*:\s*([^\r\n]+)/i);
+                            const countryMatch = fileContent.match(/COUNTRY\s*:\s*([^\r\n]+)/i);
+                            const streamsMatch = fileContent.match(/MAX STREAMS\s*:\s*([^\r\n]+)/i);
+                            const extraMembersMatch = fileContent.match(/EXTRA MEMBERS\s*:\s*([^\r\n]+)/i);
+                            const memberSinceMatch = fileContent.match(/MEMBER SINCE\s*:\s*([^\r\n]+)/i);
+                            
+                            if (planMatch && planMatch[1]) cookieDetails.plan = planMatch[1].trim();
+                            if (countryMatch && countryMatch[1]) cookieDetails.country = countryMatch[1].trim();
+                            if (streamsMatch && streamsMatch[1]) cookieDetails.maxStreams = streamsMatch[1].trim();
+                            if (extraMembersMatch && extraMembersMatch[1]) cookieDetails.extraMembers = extraMembersMatch[1].trim();
+                            if (memberSinceMatch && memberSinceMatch[1]) cookieDetails.memberSince = memberSinceMatch[1].trim();
+                        } catch (err) {
+                            console.error(`Error parsing Netflix cookie details: ${err.message}`);
+                        }
+                        
+                        validCookie = filePath;
+                        validCookieContent = fileContent;
+                        validCookieFilename = randomFile;
+                        validCookieDetails = cookieDetails;
+                        break;
+                    }
                 }
-                
-                validCookie = filePath;
-                validCookieContent = fileContent;
-                validCookieFilename = randomFile;
-                validCookieDetails = cookieDetails;
             }
             
             // If we didn't find a valid cookie
@@ -341,9 +413,11 @@ module.exports = {
                     statusEmbed.addFields([
                         {
                             name: 'Cookie Details',
-                            value: `Type: ${validCookieDetails.type || 'Unknown'}\n` +
-                                  `Quality: ${validCookieDetails.quality || 'Unknown'}\n` +
-                                  `Region: ${validCookieDetails.region || 'Unknown'}`
+                            value: `Plan: ${validCookieDetails.plan || 'Unknown'}\n` +
+                                  `Country: ${validCookieDetails.country || 'Unknown'}\n` +
+                                  `Max Streams: ${validCookieDetails.maxStreams || 'Unknown'}\n` +
+                                  `Extra Members: ${validCookieDetails.extraMembers || 'Unknown'}\n` +
+                                  `Member Since: ${validCookieDetails.memberSince || 'Unknown'}`
                         }
                     ]);
                 }
@@ -394,8 +468,10 @@ module.exports = {
                         successEmbed.addFields([
                             {
                                 name: 'Cookie Details',
-                                value: `Quality: ${validCookieDetails.quality || 'Unknown'}\n` +
-                                      `Region: ${validCookieDetails.region || 'Unknown'}`
+                                value: `Plan: ${validCookieDetails.plan || 'Unknown'}\n` +
+                                      `Country: ${validCookieDetails.country || 'Unknown'}\n` +
+                                      `Max Streams: ${validCookieDetails.maxStreams || 'Unknown'}\n` +
+                                      `Extra Members: ${validCookieDetails.extraMembers || 'Unknown'}`
                             }
                         ]);
                     }
@@ -415,19 +491,20 @@ module.exports = {
                     ]
                 });
             }
-            
         } catch (err) {
             console.error(`Error in csend command: ${err}`);
-            await processingMessage.edit({
-                embeds: [
-                    new MessageEmbed()
-                        .setColor(config.color.red || '#ff0000')
-                        .setTitle('Error')
-                        .setDescription(`An error occurred while processing this command: ${err.message}`)
-                        .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-                        .setTimestamp()
-                ]
-            });
+            if (processingMessage) {
+                await processingMessage.edit({
+                    embeds: [
+                        new MessageEmbed()
+                            .setColor(config.color.red || '#ff0000')
+                            .setTitle('Error')
+                            .setDescription(`An error occurred while processing this command: ${err.message}`)
+                            .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+                            .setTimestamp()
+                    ]
+                });
+            }
         }
-    },
+    }
 };
