@@ -40,6 +40,8 @@ module.exports = {
             .addField('Help Commands', 
                 `\`\`=help\`\`: Display this command list
 \`\`=cookie\`\`: Show cookie help
+\`\`=spotifyhelp\`\`: Show Spotify checker help
+\`\`=netflixhelp\`\`: Show Netflix checker help
 \`\`=allhelp\`\`: Show detailed help for all commands`)
             .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true, size: 64 }) })
             .setTimestamp();
